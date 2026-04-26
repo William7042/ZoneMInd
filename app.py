@@ -89,18 +89,12 @@ if run_button and policy_input:
     st.json(policy_params)
 
     # Dummy sim results until Person A is done
-    from simulation import run_simulation
-    with st.spinner("Running spatial simulation..."):
-        sim_results = run_simulation(
-            from_zones=policy_params["from_zones"],
-            to_zone=policy_params["to_zone"],
-            buffer_meters=policy_params["buffer_meters"]
-        )
-    
-    # Reload the map with updated GeoJSON
-    with open("output/parcels.geojson", "r") as f:
-        map_data = json.load(f)
-
+    sim_results = {
+        "parcels_affected": int(sum(1 for f in map_data["features"] if (f["properties"].get("units_gained") or 0) > 0)),
+        "new_units": int(sum((f["properties"].get("units_gained") or 0) for f in map_data["features"])),
+        "top_neighborhoods": ["Upper West Side", "Harlem", "Midtown"],
+        "displacement_risk": 5.4
+    }
     col3, col4 = st.columns(2)
     with col3:
         st.metric("Estimated New Units", f"{sim_results['new_units']:,}")
