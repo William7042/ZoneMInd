@@ -18,7 +18,7 @@ geojson_path = "output/parcels.geojson"
 if os.path.exists(geojson_path):
     with open(geojson_path, "r") as f:
         map_data = json.load(f)
-    st.sidebar.success("✅ Using real parcel data")
+
 else:
     map_data = {
         "type": "FeatureCollection",
@@ -46,7 +46,7 @@ else:
             },
         ]
     }
-    st.sidebar.warning("⚠️ Using dummy data — parcels.geojson not found")
+    
 
 col1, col2 = st.columns([1, 2])
 
@@ -67,7 +67,8 @@ with col2:
         pickable=True,
         stroked=True,
         filled=True,
-        get_fill_color="[properties.displacement_risk * 255, 100, 100, 160]",
+        get_fill_color="[properties.parcel_risk * 25, 255 - properties.parcel_risk * 25, 50, 180]",
+
         get_line_color=[255, 255, 255],
         line_width_min_pixels=1,
     )
@@ -75,7 +76,7 @@ with col2:
     st.pydeck_chart(pdk.Deck(
         layers=[layer],
         initial_view_state=view_state,
-        tooltip={"text": "Zone: {zone}\nNew Units: {new_units}\nDisplacement Risk: {displacement_risk}"}
+        tooltip={"text": "Zone: {ZoneDist1}\nUnits Gained: {units_gained}\nDisplacement Risk: {parcel_risk}/10"}
     ))
 
 st.markdown("---")
@@ -106,7 +107,7 @@ if run_button and policy_input:
     st.subheader("AI Policy Brief")
     brief_placeholder = st.empty()
     full_brief = ""
-    for chunk, in generate_brief(policy_params["summary"], sim_results):
+    for chunk in generate_brief(policy_params["summary"], sim_results):
         full_brief += chunk
         brief_placeholder.markdown(full_brief)
 
