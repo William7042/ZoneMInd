@@ -26,3 +26,13 @@ ZONING_RULES = {
     "R9D": {"max_far": 9.00},
     "R10": {"max_far": 10.00},
 }
+
+def get_far(zone_code):
+    # strip suffixes like R6-1, R7-2 etc
+    # try exact match first, then base zone
+    if zone_code in ZONING_RULES:
+        return ZONING_RULES[zone_code]["max_far"]
+    base = zone_code.split("-")[0]
+    if base in ZONING_RULES:
+        return ZONING_RULES[base]["max_far"]
+    return None
