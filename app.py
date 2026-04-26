@@ -1,7 +1,7 @@
 import streamlit as st
 import pydeck as pdk
 import json
-
+import os
 st.set_page_config(page_title="ZoneMind", layout="wide")
 
 st.title("🏙️ ZoneMind")
@@ -9,33 +9,43 @@ st.subheader("AI-Powered Zoning Policy Simulator")
 
 st.markdown("---")
 
-# Dummy GeoJSON parcels around Brooklyn/Queens NYC
-dummy_geojson = {
-    "type": "FeatureCollection",
-    "features": [
-        {
-            "type": "Feature",
-            "properties": {"zone": "R2", "new_units": 0, "displacement_risk": 0.2},
-            "geometry": {"type": "Polygon", "coordinates": [[
-                [-73.95, 40.65], [-73.94, 40.65], [-73.94, 40.66], [-73.95, 40.66], [-73.95, 40.65]
-            ]]}
-        },
-        {
-            "type": "Feature",
-            "properties": {"zone": "R6", "new_units": 120, "displacement_risk": 0.7},
-            "geometry": {"type": "Polygon", "coordinates": [[
-                [-73.93, 40.65], [-73.92, 40.65], [-73.92, 40.66], [-73.93, 40.66], [-73.93, 40.65]
-            ]]}
-        },
-        {
-            "type": "Feature",
-            "properties": {"zone": "R4", "new_units": 45, "displacement_risk": 0.4},
-            "geometry": {"type": "Polygon", "coordinates": [[
-                [-73.91, 40.65], [-73.90, 40.65], [-73.90, 40.66], [-73.91, 40.66], [-73.91, 40.65]
-            ]]}
-        },
-    ]
-}
+import os
+
+# Load real GeoJSON if available, otherwise use dummy data
+geojson_path = "parcels.geojson"
+
+if os.path.exists(geojson_path):
+    with open(geojson_path, "r") as f:
+        map_data = json.load(f)
+    st.sidebar.success("✅ Using real parcel data")
+else:
+    map_data = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"zone": "R2", "new_units": 0, "displacement_risk": 0.2},
+                "geometry": {"type": "Polygon", "coordinates": [[
+                    [-73.95, 40.65], [-73.94, 40.65], [-73.94, 40.66], [-73.95, 40.66], [-73.95, 40.65]
+                ]]}
+            },
+            {
+                "type": "Feature",
+                "properties": {"zone": "R6", "new_units": 120, "displacement_risk": 0.7},
+                "geometry": {"type": "Polygon", "coordinates": [[
+                    [-73.93, 40.65], [-73.92, 40.65], [-73.92, 40.66], [-73.93, 40.66], [-73.93, 40.65]
+                ]]}
+            },
+            {
+                "type": "Feature",
+                "properties": {"zone": "R4", "new_units": 45, "displacement_risk": 0.4},
+                "geometry": {"type": "Polygon", "coordinates": [[
+                    [-73.91, 40.65], [-73.90, 40.65], [-73.90, 40.66], [-73.91, 40.66], [-73.91, 40.65]
+                ]]}
+            },
+        ]
+    }
+    st.sidebar.warning("⚠️ Using dummy data — parcels.geojson not found")
 
 col1, col2 = st.columns([1, 2])
 
@@ -52,7 +62,7 @@ with col2:
     st.header("Map")
     layer = pdk.Layer(
         "GeoJsonLayer",
-        dummy_geojson,
+        map_data,
         pickable=True,
         stroked=True,
         filled=True,
