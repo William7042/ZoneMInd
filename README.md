@@ -44,7 +44,7 @@ ANTHROPIC_API_KEY=your_key_here
 
 Place the following in the `data/` directory:
 
-- `MapPLUTO25v4.gdb` — [Download from NYC DCP](https://www.nyc.gov/site/planning/data-maps/open-data/dwn-pluto-mappluto.page)
+- `MapPLUTO25v4.gdb` — [Download from NYC DCP]([https://www.nyc.gov/site/planning/data-maps/open-data/dwn-pluto-mappluto.page](https://data.cityofnewyork.us/City-Government/Primary-Land-Use-Tax-Lot-Output-PLUTO-/64uk-42ks/about_data))
 - `Stations.csv` — MTA subway stations with `Stop Name`, `GTFS Latitude`, `GTFS Longitude` columns
 
 ### 4. Run
