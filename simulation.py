@@ -101,7 +101,7 @@ def _load_data():
 # STEP 4: run_simulation() — called from the UI on every policy run
 # ==============================================================================
 
-def run_simulation(from_zones, to_zone, buffer_meters=804, near_subway_only=True):
+def run_simulation(from_zones, to_zone, buffer_meters=804, near_subway_only=True, filter_zipcodes=None):
     """
     Simulates upzoning parcels from one or more zones to a target zone.
 
@@ -115,6 +115,11 @@ def run_simulation(from_zones, to_zone, buffer_meters=804, near_subway_only=True
 
     # Work on a copy so original data is never modified
     sim = _gdf.copy()
+
+     # Filter to specific zip codes if provided, otherwise use all of Manhattan
+    if filter_zipcodes:
+        zip_strs = [str(int(z)) for z in filter_zipcodes]  # normalize to "10026" format
+        sim = sim[sim["ZipCode"].fillna(0).astype(int).astype(str).isin(zip_strs)]
 
     if near_subway_only:
         # Rebuild subway buffer with the specified distance
