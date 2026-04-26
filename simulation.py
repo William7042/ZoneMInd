@@ -157,3 +157,18 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
 print("Running simulation...")
 result = run_simulation(["R6", "R6A", "R6B"], "R8", buffer_meters=804)
 print(result)
+
+# ==============================================================================
+# STRESS TEST — multiple policy inputs
+# ==============================================================================
+test_cases = [
+    (["R7", "R7A", "R7B"], "R9", 804),    # moderate upzone
+    (["R8", "R8A", "R8B"], "R10", 1200),  # aggressive upzone, bigger buffer
+    (["R6"], "R7", 400),                   # small upzone, tight buffer
+]
+
+for from_zones, to_zone, buffer in test_cases:
+    r = run_simulation(from_zones, to_zone, buffer)
+    print(f"{from_zones} → {to_zone} | buffer: {buffer}m | parcels: {r['parcels_affected']} | units: {r['new_units']} | risk: {r['displacement_risk']}")
+
+print(gdf[["AssessTot", "AssessLand", "YearBuilt"]].head())
