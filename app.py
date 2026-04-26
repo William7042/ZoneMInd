@@ -426,7 +426,7 @@ with right:
             layers=[layer, station_layer],
             initial_view_state=view_state,
             tooltip={
-                "text": "Zone: {ZoneDist1}\\nUnits Gained: {units_gained}\\nDisplacement Risk: {parcel_risk}/10"
+                "html": "Zone: {ZoneDist1}<br>Units Gained: {units_gained}<br>Displacement Risk: {parcel_risk}/10"
             }
         ))
 
