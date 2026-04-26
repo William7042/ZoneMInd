@@ -1,5 +1,6 @@
 import os
 import datetime
+import numpy as np
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
@@ -113,8 +114,10 @@ def run_simulation(from_zones, to_zone, buffer_meters=804, near_subway_only=True
     """
     _load_data()  # no-op if already loaded
 
-    # Work on a copy so original data is never modified
-    sim = _gdf.copy()
+    # Work on a copy — only the columns we actually use
+    needed = ["BBL", "ZoneDist1", "LotArea", "UnitsRes", "BldgArea",
+              "AssessTot", "AssessLand", "YearBuilt", "ZipCode", "geometry"]
+    sim = _gdf[needed].copy()
 
      # Filter to specific zip codes if provided, otherwise use all of Manhattan
     if filter_zipcodes:
@@ -134,16 +137,13 @@ def run_simulation(from_zones, to_zone, buffer_meters=804, near_subway_only=True
     # Get FAR values for before and after
     to_far = ZONING_RULES.get(to_zone, {}).get("max_far", 0)
 
-    sim["far_before"] = sim["ZoneDist1"].apply(lambda z: get_far(z) or 0 if isinstance(z, str) else 0)
+    far_map = {z: rules["max_far"] for z, rules in ZONING_RULES.items()}
+    sim["far_before"] = sim["ZoneDist1"].map(far_map).fillna(0)
 
-    zone_match = sim["ZoneDist1"].apply(
-        lambda z: any(z.startswith(fz) for fz in from_zones) if isinstance(z, str) else False
-    )
+    zone_match = sim["ZoneDist1"].str.startswith(tuple(from_zones), na=False)
     affected = zone_match & sim["near_subway"]
 
-    sim["far_after"] = sim.apply(
-        lambda row: to_far if affected[row.name] else row["far_before"], axis=1
-    )
+    sim["far_after"] = np.where(affected, to_far, sim["far_before"])
 
     # Estimate units: 1 unit per 1000 sq ft of floor area
     sim["units_before"] = (sim["LotArea"] * sim["far_before"] / 1000).round()
