@@ -1,4 +1,5 @@
 import os
+import datetime
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
@@ -46,83 +47,86 @@ ZIP_TO_NEIGHBORHOOD = {
     "10040": "Inwood",
 }
 
+#populated once on first call to run_simulation()
+_gdf = None
+_stations_gdf = None
+
+
+def _load_data():
+    """Load and preprocess parcel + station data. Runs once; reuses cache after."""
+    global _gdf, _stations_gdf
+    if _gdf is not None:
+        return  # Already loaded
+
+    cache_path = "output/manhattan_residential.geojson"
+
+    if os.path.exists(cache_path):
+        print("Loading from cache...")
+        gdf = gpd.read_file(cache_path)
+    else:
+        print("Loading MapPLUTO")
+        gdf = gpd.read_file("data/MapPLUTO25v4.gdb", layer="MapPLUTO_25v4_clipped")
+        gdf = gdf[gdf["Borough"] == "MN"]
+        gdf = gdf[gdf["ZoneDist1"].str.startswith("R", na=False)]
+        gdf.to_crs("EPSG:4326").to_file(cache_path, driver="GeoJSON")
+        print(f"Saved cache to {cache_path}")
+
+    print(f"Loaded {len(gdf)} residential parcels in Manhattan")
+
+    # ==============================================================================
+    # STEP 2: Load subway stations and convert lat/long to point geometries
+    # ==============================================================================
+    print("Loading subway stations...")
+    stations_df = pd.read_csv("data/Stations.csv")
+
+    stations_gdf = gpd.GeoDataFrame(
+        stations_df,
+        geometry=gpd.points_from_xy(stations_df["GTFS Longitude"], stations_df["GTFS Latitude"]),
+        crs="EPSG:4326"
+    )
+    print(f"Loaded {len(stations_gdf)} subway stations")
+
+    # ==============================================================================
+    # STEP 3: Reproject and flag parcels near subway (default 0.5 mile buffer)
+    # ==============================================================================
+    gdf = gdf.to_crs("EPSG:3857")
+    stations_gdf = stations_gdf.to_crs("EPSG:3857")
+
+    print("Buffering subway stations...")
+    stations_gdf["geometry"] = stations_gdf.buffer(804)
+
+    gdf = gpd.sjoin(gdf, stations_gdf[["geometry"]], how="left", predicate="intersects")
+    gdf["near_subway"] = ~gdf["index_right"].isna()
+    gdf = gdf.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
+
+    print(f"Parcels near subway: {gdf['near_subway'].sum()}")
+    print(f"Parcels not near subway: {(~gdf['near_subway']).sum()}")
+
+    _gdf = gdf
+    _stations_gdf = stations_gdf
+
+
 # ==============================================================================
-# STEP 1: Load MapPLUTO parcel data
-# Uses cached GeoJSON if available, otherwise loads from full .gdb (slow)
-# ==============================================================================
-cache_path = "output/manhattan_residential.geojson"
-
-if os.path.exists(cache_path):
-    print("Loading from cache...")
-    gdf = gpd.read_file(cache_path)
-else:
-    print("Loading MapPLUTO (slow, first run only)...")
-    gdf = gpd.read_file("data/MapPLUTO25v4.gdb", layer="MapPLUTO_25v4_clipped")
-    gdf = gdf[gdf["Borough"] == "MN"]
-    gdf = gdf[gdf["ZoneDist1"].str.startswith("R", na=False)]
-    gdf.to_crs("EPSG:4326").to_file(cache_path, driver="GeoJSON")
-    print(f"Saved cache to {cache_path}")
-
-print(f"Loaded {len(gdf)} residential parcels in Manhattan")
-print(gdf[["BBL", "ZoneDist1", "UnitsRes", "LotArea"]].head())
-
-# ==============================================================================
-# STEP 2: Load subway stations and convert lat/long to point geometries
-# ==============================================================================
-print("Loading subway stations...")
-stations_df = pd.read_csv("data/Stations.csv")
-
-# Convert lat/long columns into actual geometry points geopandas understands
-stations_gdf = gpd.GeoDataFrame(
-    stations_df,
-    geometry=gpd.points_from_xy(stations_df["GTFS Longitude"], stations_df["GTFS Latitude"]),
-    crs="EPSG:4326"  # Standard lat/long coordinate system
-)
-
-print(f"Loaded {len(stations_gdf)} subway stations")
-print(stations_gdf[["Stop Name", "Borough", "geometry"]].head())
-
-# ==============================================================================
-# STEP 3: Buffer subway stations and flag nearby parcels
-# ==============================================================================
-
-# Reproject to meter-based CRS so we can buffer in meters, not degrees
-gdf = gdf.to_crs("EPSG:3857")
-stations_gdf = stations_gdf.to_crs("EPSG:3857")
-
-# Draw a 0.5 mile (804 meter) circle around each station
-print("Buffering subway stations...")
-stations_gdf["geometry"] = stations_gdf.buffer(804)
-
-# Spatial join: flag any parcel that intersects a station buffer circle
-gdf = gpd.sjoin(gdf, stations_gdf[["geometry"]], how="left", predicate="intersects")
-gdf["near_subway"] = ~gdf["index_right"].isna()  # True if parcel is near a station
-gdf = gdf.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
-
-print(f"Parcels near subway: {gdf['near_subway'].sum()}")
-print(f"Parcels not near subway: {(~gdf['near_subway']).sum()}")
-
-# ==============================================================================
-# STEP 4: run_simulation() — core function Person B calls from the LLM loop
-# policy_str example: "upzone R2 to R6 within 0.5 miles of subway"
+# STEP 4: run_simulation() — called from the UI on every policy run
 # ==============================================================================
 
 def run_simulation(from_zones, to_zone, buffer_meters=804):
     """
     Simulates upzoning parcels from one or more zones to a target zone.
-    
+
     from_zones: list of zones to upzone e.g. ["R6", "R6A", "R6B"]
     to_zone: zone to upzone to e.g. "R8"
     buffer_meters: distance from subway to apply upzoning (default 804m = 0.5 miles)
     Returns a dict with simulation summary + saves parcels.geojson
     """
+    _load_data()  # no-op if already loaded
 
     # Work on a copy so original data is never modified
-    sim = gdf.copy()
+    sim = _gdf.copy()
 
     # Rebuild subway buffer with the specified distance
-    stations_buffered = stations_gdf.copy()
-    stations_buffered["geometry"] = stations_gdf.buffer(buffer_meters)
+    stations_buffered = _stations_gdf.copy()
+    stations_buffered["geometry"] = _stations_gdf.buffer(buffer_meters)
     sim = gpd.sjoin(sim, stations_buffered[["geometry"]], how="left", predicate="intersects")
     sim["near_subway"] = ~sim["index_right"].isna()
     sim = sim.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
@@ -156,15 +160,14 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
     underdevelopment_score = 1 - sim["far_utilized"]
 
     # 2. Speculation score — land value as share of total assessed value
-    # High ratio = land worth way more than building = prime redevelopment target
     sim["AssessBldg"] = (sim["AssessTot"] - sim["AssessLand"]).clip(lower=1)
     speculation_score_normalized = (sim["AssessLand"] / sim["AssessTot"]).clip(0, 1).fillna(0)
 
     # 3. Building age score — older buildings have more rent stabilized tenants
-    # YearBuilt of 0 means unknown, treat as median year
     median_year = sim[sim["YearBuilt"] > 0]["YearBuilt"].median()
     sim["YearBuilt"] = sim["YearBuilt"].replace(0, median_year)
-    building_age_score = ((2026 - sim["YearBuilt"]) / 100).clip(0, 1).fillna(0)
+    current_year = datetime.datetime.now().year
+    building_age_score = ((current_year - sim["YearBuilt"]) / 100).clip(0, 1).fillna(0)
 
     # 4. Units at risk score — capped at 50 units
     units_at_risk_score = (sim["UnitsRes"] / 50).clip(0, 1).fillna(0)
@@ -191,7 +194,7 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
     # Reproject back to standard lat/long for the map
     sim = sim.to_crs("EPSG:4326")
 
-    # Save GeoJSON for Person C with all columns including per-parcel risk
+    # Save GeoJSON for the frontend
     output = sim[["BBL", "ZoneDist1", "LotArea", "UnitsRes",
                   "near_subway", "far_before", "far_after",
                   "units_before", "units_after", "units_gained",
@@ -200,12 +203,16 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
     geojson_path = "output/parcels.geojson"
     output.to_file(geojson_path, driver="GeoJSON")
 
-    # Build summary dict in the exact format Person B expects
-    parcels_affected = int(affected.sum())
-    new_units = int(sim["units_gained"].sum())
-
     # Top neighborhoods by displacement risk
-    sim["neighborhood"] = sim["ZipCode"].fillna(0).astype(int).astype(str).str.strip().map(ZIP_TO_NEIGHBORHOOD).fillna("Other")
+    sim["neighborhood"] = (
+        sim["ZipCode"]
+        .astype(str)
+        .str.strip()
+        .str.split(".")
+        .str[0]  # handles floats like "10001.0" → "10001"
+        .map(ZIP_TO_NEIGHBORHOOD)
+        .fillna("Other")
+    )
     top_hoods = (
         sim[affected]
         .groupby("neighborhood")["parcel_risk"]
@@ -216,16 +223,18 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
     )
 
     return {
-        "parcels_affected": parcels_affected,
-        "new_units": new_units,
+        "parcels_affected": int(affected.sum()),
+        "new_units": int(sim["units_gained"].sum()),
         "top_neighborhoods": top_hoods,
         "displacement_risk": displacement_risk,
         "geojson_path": geojson_path
     }
 
+
 # ------------------------------------------------------------------------------
 # Test the simulation and output GeoJSON for the frontend
 # ------------------------------------------------------------------------------
-print("Running simulation...")
-result = run_simulation(["R6", "R6A", "R6B"], "R8", buffer_meters=804)
-print(result)
+if __name__ == "__main__":
+    print("Running simulation...")
+    result = run_simulation(["R6", "R6A", "R6B"], "R8", buffer_meters=804)
+    print(result)

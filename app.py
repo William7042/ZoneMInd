@@ -5,6 +5,13 @@ import os
 from brief_generator import generate_brief
 from policy_interpreter import interpret_policy
 
+try:
+    from simulation import run_simulation
+    simulation_available = True
+except Exception as e:
+    simulation_available = False
+    simulation_error = str(e)
+
 st.set_page_config(page_title="ZoneMind", layout="wide")
 
 st.title("🏙️ ZoneMind")
@@ -12,41 +19,48 @@ st.subheader("AI-Powered Zoning Policy Simulator")
 
 st.markdown("---")
 
-# Load real GeoJSON if available, otherwise use dummy data
+# Session state — persists across reruns
+if "sim_results" not in st.session_state:
+    st.session_state.sim_results = None
+if "policy_params" not in st.session_state:
+    st.session_state.policy_params = None
+if "brief_text" not in st.session_state:
+    st.session_state.brief_text = None
+
+# Load GeoJSON
 geojson_path = "output/parcels.geojson"
 
 if os.path.exists(geojson_path):
     with open(geojson_path, "r") as f:
         map_data = json.load(f)
-
 else:
+    # dummy data
     map_data = {
         "type": "FeatureCollection",
         "features": [
             {
                 "type": "Feature",
-                "properties": {"zone": "R2", "new_units": 0, "displacement_risk": 0.2},
+                "properties": {"ZoneDist1": "R2", "units_gained": 0, "parcel_risk": 2.0},
                 "geometry": {"type": "Polygon", "coordinates": [[
                     [-73.95, 40.65], [-73.94, 40.65], [-73.94, 40.66], [-73.95, 40.66], [-73.95, 40.65]
                 ]]}
             },
             {
                 "type": "Feature",
-                "properties": {"zone": "R6", "new_units": 120, "displacement_risk": 0.7},
+                "properties": {"ZoneDist1": "R6", "units_gained": 120, "parcel_risk": 7.0},
                 "geometry": {"type": "Polygon", "coordinates": [[
                     [-73.93, 40.65], [-73.92, 40.65], [-73.92, 40.66], [-73.93, 40.66], [-73.93, 40.65]
                 ]]}
             },
             {
                 "type": "Feature",
-                "properties": {"zone": "R4", "new_units": 45, "displacement_risk": 0.4},
+                "properties": {"ZoneDist1": "R4", "units_gained": 45, "parcel_risk": 4.0},
                 "geometry": {"type": "Polygon", "coordinates": [[
                     [-73.91, 40.65], [-73.90, 40.65], [-73.90, 40.66], [-73.91, 40.66], [-73.91, 40.65]
                 ]]}
             },
         ]
     }
-    
 
 col1, col2 = st.columns([1, 2])
 
@@ -67,8 +81,8 @@ with col2:
         pickable=True,
         stroked=True,
         filled=True,
+        # parcel_risk is 0–10: low=green, high=red
         get_fill_color="[properties.parcel_risk * 25, 255 - properties.parcel_risk * 25, 50, 180]",
-
         get_line_color=[255, 255, 255],
         line_width_min_pixels=1,
     )
@@ -80,38 +94,58 @@ with col2:
     ))
 
 st.markdown("---")
-st.header("Policy Brief")
+st.header("Simulation Results")
 
-if run_button and policy_input:
-    with st.spinner("Interpreting policy..."):
-        policy_params = interpret_policy(policy_input)
+if run_button and not policy_input:
+    st.warning("Please enter a policy proposal first.")
 
-    st.success("✅ Policy interpreted!")
-    st.json(policy_params)
+elif run_button and policy_input:
+    if not simulation_available:
+        st.error(f"Simulation unavailable — data files missing. ({simulation_error})")
+    else:
+        with st.spinner("Interpreting policy..."):
+            policy_params = interpret_policy(policy_input)
 
-    # Dummy sim results until Person A is done
-    sim_results = {
-        "parcels_affected": int(sum(1 for f in map_data["features"] if (f["properties"].get("units_gained") or 0) > 0)),
-        "new_units": int(sum((f["properties"].get("units_gained") or 0) for f in map_data["features"])),
-        "top_neighborhoods": ["Upper West Side", "Harlem", "Midtown"],
-        "displacement_risk": 5.4
-    }
+        with st.spinner("Running simulation (this may take a moment)..."):
+            sim_results = run_simulation(
+                policy_params["from_zones"],
+                policy_params["to_zone"],
+                policy_params.get("buffer_meters", 800)
+            )
+
+        # Store results and trigger a clean rerun so the map reloads from the new GeoJSON
+        st.session_state.sim_results = sim_results
+        st.session_state.policy_params = policy_params
+        st.session_state.brief_text = None
+        st.rerun()
+
+if st.session_state.sim_results:
+    sim_results = st.session_state.sim_results
+    policy_params = st.session_state.policy_params
+
+    with st.expander("Interpreted policy parameters"):
+        st.json(policy_params)
+
     col3, col4 = st.columns(2)
     with col3:
         st.metric("Estimated New Units", f"{sim_results['new_units']:,}")
         st.metric("Parcels Affected", f"{sim_results['parcels_affected']:,}")
     with col4:
         st.metric("Avg Displacement Risk", f"{sim_results['displacement_risk']}/10")
-        st.metric("Top Area", sim_results['top_neighborhoods'][0])
+        top_area = sim_results["top_neighborhoods"][0] if sim_results["top_neighborhoods"] else "N/A"
+        st.metric("Top At-Risk Area", top_area)
 
     st.subheader("AI Policy Brief")
-    brief_placeholder = st.empty()
-    full_brief = ""
-    for chunk in generate_brief(policy_params["summary"], sim_results):
-        full_brief += chunk
-        brief_placeholder.markdown(full_brief)
+    if st.session_state.brief_text:
+        # Show cached brief on subsequent reruns (avoids re-generating)
+        st.markdown(st.session_state.brief_text)
+    else:
+        brief_placeholder = st.empty()
+        full_brief = ""
+        for chunk in generate_brief(policy_params["summary"], sim_results):
+            full_brief += chunk
+            brief_placeholder.markdown(full_brief)
+        st.session_state.brief_text = full_brief
 
-elif run_button and not policy_input:
-    st.warning("Please enter a policy proposal first.")
 else:
     st.info("Enter a proposal and click Run Simulation to see results.")
