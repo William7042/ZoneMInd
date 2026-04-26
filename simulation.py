@@ -107,17 +107,37 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
 
     # ==========================================================================
     # Displacement risk score per parcel (0-10 scale)
-    # Low FAR utilization + many existing units = high displacement risk
-    # Underdeveloped lots near transit with existing residents = highest risk
+    # Formula: underdevelopment + speculation + building age + units + small building
     # ==========================================================================
 
-    # How much of allowed FAR is currently being used (proxy for underdevelopment)
+    # 1. Underdevelopment score — how much of allowed FAR is unused
     sim["far_utilized"] = (sim["BldgArea"] / (sim["LotArea"] * sim["far_before"])).clip(0, 1).fillna(0)
+    underdevelopment_score = 1 - sim["far_utilized"]
 
-    # Underdeveloped lots with existing residents = highest risk
+    # 2. Speculation score — land value as share of total assessed value
+    # High ratio = land worth way more than building = prime redevelopment target
+    sim["AssessBldg"] = (sim["AssessTot"] - sim["AssessLand"]).clip(lower=1)
+    speculation_score_normalized = (sim["AssessLand"] / sim["AssessTot"]).clip(0, 1).fillna(0)
+
+    # 3. Building age score — older buildings have more rent stabilized tenants
+    # YearBuilt of 0 means unknown, treat as median year
+    median_year = sim[sim["YearBuilt"] > 0]["YearBuilt"].median()
+    sim["YearBuilt"] = sim["YearBuilt"].replace(0, median_year)
+    building_age_score = ((2026 - sim["YearBuilt"]) / 100).clip(0, 1).fillna(0)
+
+    # 4. Units at risk score — capped at 50 units
+    units_at_risk_score = (sim["UnitsRes"] / 50).clip(0, 1).fillna(0)
+
+    # 5. Small building score — under 10 units = more likely rent stabilized
+    small_building_score = (sim["UnitsRes"] < 10).astype(float)
+
+    # Weighted formula
     sim["parcel_risk"] = (
-        (1 - sim["far_utilized"]) * 0.5 +   # underdeveloped = higher risk
-        (sim["UnitsRes"] / (sim["UnitsRes"].max() + 1)) * 0.5  # more existing residents = higher risk
+        underdevelopment_score * 0.30 +
+        speculation_score_normalized * 0.20 +
+        building_age_score * 0.20 +
+        units_at_risk_score * 0.15 +
+        small_building_score * 0.15
     ) * 10
 
     # Only assign risk to affected parcels, zero out everyone else
@@ -157,18 +177,3 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
 print("Running simulation...")
 result = run_simulation(["R6", "R6A", "R6B"], "R8", buffer_meters=804)
 print(result)
-
-# ==============================================================================
-# STRESS TEST — multiple policy inputs
-# ==============================================================================
-test_cases = [
-    (["R7", "R7A", "R7B"], "R9", 804),    # moderate upzone
-    (["R8", "R8A", "R8B"], "R10", 1200),  # aggressive upzone, bigger buffer
-    (["R6"], "R7", 400),                   # small upzone, tight buffer
-]
-
-for from_zones, to_zone, buffer in test_cases:
-    r = run_simulation(from_zones, to_zone, buffer)
-    print(f"{from_zones} → {to_zone} | buffer: {buffer}m | parcels: {r['parcels_affected']} | units: {r['new_units']} | risk: {r['displacement_risk']}")
-
-print(gdf[["AssessTot", "AssessLand", "YearBuilt"]].head())
