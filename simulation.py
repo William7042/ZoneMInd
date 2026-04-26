@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
-from zoning_rules import ZONING_RULES
+from zoning_rules import ZONING_RULES, get_far
 
 # ==============================================================================
 # STEP 1: Load MapPLUTO parcel data
@@ -57,12 +57,6 @@ gdf = gpd.sjoin(gdf, stations_gdf[["geometry"]], how="left", predicate="intersec
 gdf["near_subway"] = ~gdf["index_right"].isna()  # True if parcel is near a station
 gdf = gdf.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
 
-# Save filtered parcels cache for frontend teammate
-# Much smaller than full MapPLUTO — only Manhattan residential parcels
-cache_path = "output/manhattan_residential.geojson"
-gdf.to_crs("EPSG:4326").to_file(cache_path, driver="GeoJSON")
-print(f"Saved filtered parcel cache to {cache_path}")
-
 print(f"Parcels near subway: {gdf['near_subway'].sum()}")
 print(f"Parcels not near subway: {(~gdf['near_subway']).sum()}")
 
@@ -94,15 +88,7 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
     # Get FAR values for before and after
     to_far = ZONING_RULES.get(to_zone, {}).get("max_far", 0)
 
-    # Identify affected parcels: zone matches AND near subway
-    def get_far(zone):
-        # Match on base zone e.g. "R6" matches "R6", "R6A", "R6B"
-        for key in ZONING_RULES:
-            if zone.startswith(key):
-                return ZONING_RULES[key]["max_far"]
-        return 0
-
-    sim["far_before"] = sim["ZoneDist1"].apply(lambda z: get_far(z) if isinstance(z, str) else 0)
+    sim["far_before"] = sim["ZoneDist1"].apply(lambda z: get_far(z) or 0 if isinstance(z, str) else 0)
 
     zone_match = sim["ZoneDist1"].apply(
         lambda z: any(z.startswith(fz) for fz in from_zones) if isinstance(z, str) else False
@@ -190,5 +176,3 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
 print("Running simulation...")
 result = run_simulation(["R6", "R6A", "R6B"], "R8", buffer_meters=804)
 print(result)
-
-print([col for col in gdf.columns if any(x in col.lower() for x in ["neigh", "hood", "comm", "area", "name"])])
