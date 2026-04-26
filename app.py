@@ -1,7 +1,6 @@
 import streamlit as st
 import pydeck as pdk
 import json
-import os
 import pandas as pd
 from brief_generator import generate_brief
 from policy_interpreter import interpret_policy
@@ -20,28 +19,29 @@ st.subheader("AI-Powered Zoning Policy Simulator")
 
 st.markdown("---")
 
-# Session state — persists across reruns
-if "sim_results" not in st.session_state:
-    st.session_state.sim_results = None
-if "policy_params" not in st.session_state:
-    st.session_state.policy_params = None
-if "brief_text" not in st.session_state:
-    st.session_state.brief_text = None
+# Session state
+if "scenarios" not in st.session_state:
+    st.session_state.scenarios = []
+if "active_scenario" not in st.session_state:
+    st.session_state.active_scenario = 0
 
-# Load GeoJSON — only show parcels after a simulation has been run this session
-geojson_path = "output/parcels.geojson"
-
-if st.session_state.sim_results and os.path.exists(geojson_path):
-    with open(geojson_path, "r") as f:
-        map_data = json.load(f)
-else:
-    map_data = {"type": "FeatureCollection", "features": []}
-
-# Load subway stations
+# Load subway stations (always shown)
 stations_df = pd.read_csv("data/Stations.csv")
 stations_data = stations_df[["Stop Name", "GTFS Latitude", "GTFS Longitude"]].rename(
     columns={"GTFS Latitude": "lat", "GTFS Longitude": "lon"}
 ).to_dict("records")
+
+# Scenario picker — only shown when there are 2+ scenarios
+scenarios = st.session_state.scenarios
+if len(scenarios) > 1:
+    labels = [f"#{i+1}: {s['policy_params']['summary'][:45]}" for i, s in enumerate(scenarios)]
+    selected_label = st.radio("Compare scenarios:", labels,
+                              index=st.session_state.active_scenario, horizontal=True)
+    st.session_state.active_scenario = labels.index(selected_label)
+
+active_idx = st.session_state.active_scenario
+active = scenarios[active_idx] if scenarios else None
+map_data = active["map_data"] if active else {"type": "FeatureCollection", "features": []}
 
 col1, col2 = st.columns([1, 2])
 
@@ -62,7 +62,6 @@ with col2:
         pickable=True,
         stroked=True,
         filled=True,
-        # parcel_risk is 0–10: low=green, high=red
         get_fill_color="[properties.parcel_risk * 25, 255 - properties.parcel_risk * 25, 50, 180]",
         get_line_color=[255, 255, 255],
         line_width_min_pixels=1,
@@ -105,15 +104,23 @@ elif run_button and policy_input:
                 policy_params.get("filter_zipcodes")
             )
 
-        # Store results and trigger a clean rerun so the map reloads from the new GeoJSON
-        st.session_state.sim_results = sim_results
-        st.session_state.policy_params = policy_params
-        st.session_state.brief_text = None
+        # Load the geojson the simulation just wrote and store it in the scenario
+        geojson_path = "output/parcels.geojson"
+        with open(geojson_path, "r") as f:
+            new_map_data = json.load(f)
+
+        st.session_state.scenarios.append({
+            "policy_params": policy_params,
+            "sim_results": sim_results,
+            "brief_text": None,
+            "map_data": new_map_data,
+        })
+        st.session_state.active_scenario = len(st.session_state.scenarios) - 1
         st.rerun()
 
-if st.session_state.sim_results:
-    sim_results = st.session_state.sim_results
-    policy_params = st.session_state.policy_params
+if active:
+    sim_results = active["sim_results"]
+    policy_params = active["policy_params"]
 
     with st.expander("Interpreted policy parameters"):
         st.json(policy_params)
@@ -128,16 +135,15 @@ if st.session_state.sim_results:
         st.metric("Top At-Risk Area", top_area)
 
     st.subheader("AI Policy Brief")
-    if st.session_state.brief_text:
-        # Show cached brief on subsequent reruns (avoids re-generating)
-        st.markdown(st.session_state.brief_text)
+    if active["brief_text"]:
+        st.markdown(active["brief_text"])
     else:
         brief_placeholder = st.empty()
         full_brief = ""
         for chunk in generate_brief(policy_params["summary"], sim_results):
             full_brief += chunk
             brief_placeholder.markdown(full_brief)
-        st.session_state.brief_text = full_brief
+        st.session_state.scenarios[active_idx]["brief_text"] = full_brief
 
 else:
     st.info("Enter a proposal and click Run Simulation to see results.")
