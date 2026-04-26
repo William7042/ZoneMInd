@@ -110,13 +110,14 @@ def _load_data():
 # STEP 4: run_simulation() — called from the UI on every policy run
 # ==============================================================================
 
-def run_simulation(from_zones, to_zone, buffer_meters=804):
+def run_simulation(from_zones, to_zone, buffer_meters=804, near_subway_only=True):
     """
     Simulates upzoning parcels from one or more zones to a target zone.
 
     from_zones: list of zones to upzone e.g. ["R6", "R6A", "R6B"]
     to_zone: zone to upzone to e.g. "R8"
     buffer_meters: distance from subway to apply upzoning (default 804m = 0.5 miles)
+    near_subway_only: if False, apply upzoning to all matching parcels regardless of subway proximity
     Returns a dict with simulation summary + saves parcels.geojson
     """
     _load_data()  # no-op if already loaded
@@ -124,12 +125,15 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
     # Work on a copy so original data is never modified
     sim = _gdf.copy()
 
-    # Rebuild subway buffer with the specified distance
-    stations_buffered = _stations_gdf.copy()
-    stations_buffered["geometry"] = _stations_gdf.buffer(buffer_meters)
-    sim = gpd.sjoin(sim, stations_buffered[["geometry"]], how="left", predicate="intersects")
-    sim["near_subway"] = ~sim["index_right"].isna()
-    sim = sim.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
+    if near_subway_only:
+        # Rebuild subway buffer with the specified distance
+        stations_buffered = _stations_gdf.copy()
+        stations_buffered["geometry"] = _stations_gdf.buffer(buffer_meters)
+        sim = gpd.sjoin(sim, stations_buffered[["geometry"]], how="left", predicate="intersects")
+        sim["near_subway"] = ~sim["index_right"].isna()
+        sim = sim.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
+    else:
+        sim["near_subway"] = True
 
     # Get FAR values for before and after
     to_far = ZONING_RULES.get(to_zone, {}).get("max_far", 0)

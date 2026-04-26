@@ -27,40 +27,14 @@ if "policy_params" not in st.session_state:
 if "brief_text" not in st.session_state:
     st.session_state.brief_text = None
 
-# Load GeoJSON — only use saved file if a simulation has been run this session
+# Load GeoJSON — only show parcels after a simulation has been run this session
 geojson_path = "output/parcels.geojson"
 
 if st.session_state.sim_results and os.path.exists(geojson_path):
     with open(geojson_path, "r") as f:
         map_data = json.load(f)
 else:
-    # dummy data
-    map_data = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": {"ZoneDist1": "R2", "units_gained": 0, "parcel_risk": 2.0},
-                "geometry": {"type": "Polygon", "coordinates": [[
-                    [-73.95, 40.65], [-73.94, 40.65], [-73.94, 40.66], [-73.95, 40.66], [-73.95, 40.65]
-                ]]}
-            },
-            {
-                "type": "Feature",
-                "properties": {"ZoneDist1": "R6", "units_gained": 120, "parcel_risk": 7.0},
-                "geometry": {"type": "Polygon", "coordinates": [[
-                    [-73.93, 40.65], [-73.92, 40.65], [-73.92, 40.66], [-73.93, 40.66], [-73.93, 40.65]
-                ]]}
-            },
-            {
-                "type": "Feature",
-                "properties": {"ZoneDist1": "R4", "units_gained": 45, "parcel_risk": 4.0},
-                "geometry": {"type": "Polygon", "coordinates": [[
-                    [-73.91, 40.65], [-73.90, 40.65], [-73.90, 40.66], [-73.91, 40.66], [-73.91, 40.65]
-                ]]}
-            },
-        ]
-    }
+    map_data = {"type": "FeatureCollection", "features": []}
 
 col1, col2 = st.columns([1, 2])
 
@@ -86,7 +60,7 @@ with col2:
         get_line_color=[255, 255, 255],
         line_width_min_pixels=1,
     )
-    view_state = pdk.ViewState(latitude=40.655, longitude=-73.93, zoom=12, pitch=30)
+    view_state = pdk.ViewState(latitude=40.728, longitude=-73.994, zoom=11, pitch=30)
     st.pydeck_chart(pdk.Deck(
         layers=[layer],
         initial_view_state=view_state,
@@ -110,7 +84,8 @@ elif run_button and policy_input:
             sim_results = run_simulation(
                 policy_params["from_zones"],
                 policy_params["to_zone"],
-                policy_params.get("buffer_meters", 800)
+                policy_params.get("buffer_meters", 800),
+                policy_params.get("near_subway_only", True)
             )
 
         # Store results and trigger a clean rerun so the map reloads from the new GeoJSON

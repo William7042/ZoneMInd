@@ -22,6 +22,8 @@ def _validate_zones(params):
         params["from_zones"] = _all_zones_less_dense_than(params["to_zone"])
     if "buffer_meters" not in params or not isinstance(params["buffer_meters"], (int, float)):
         params["buffer_meters"] = 800
+    if "near_subway_only" not in params or not isinstance(params["near_subway_only"], bool):
+        params["near_subway_only"] = True
     if "summary" not in params or not params["summary"]:
         params["summary"] = "Zoning upzone proposal"
     return params
@@ -46,7 +48,8 @@ Return ONLY valid JSON. No markdown, no explanation.
 {{
   "from_zones": [list of zone codes to upzone FROM],
   "to_zone": "zone code to upzone TO",
-  "buffer_meters": <integer meters from subway>,
+  "near_subway_only": <true or false>,
+  "buffer_meters": <integer meters from subway, only relevant if near_subway_only is true>,
   "summary": "one sentence plain english description"
 }}
 
@@ -57,10 +60,13 @@ Return ONLY valid JSON. No markdown, no explanation.
 
 2. to_zone: the target density zone. If unspecified, infer from context (e.g. "upzone" near transit usually means R7 or R8).
 
-3. buffer_meters: convert to meters.
+3. near_subway_only: set to true ONLY if the user explicitly mentions proximity to subway, transit, or a station.
+   - If the user says "all parcels", "citywide", or makes no mention of subway/transit, set to false.
+
+4. buffer_meters: only matters when near_subway_only is true. Convert to meters.
    - 1 foot = 0.3048 m → 500 ft = 152 m
    - 1 mile = 1609 m → 0.5 miles = 805 m
-   - If no distance given, use 800.
+   - If near_subway_only is true but no distance given, use 800.
 
 Policy: {user_input}"""
         }]
