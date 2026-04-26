@@ -24,7 +24,7 @@ Paragraph 2: The displacement risk and who is most vulnerable
 Paragraph 3: Recommendation — is this a good tradeoff and what safeguards are needed"""
 
     with client.messages.stream(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-6",
         max_tokens=800,
         messages=[{"role": "user", "content": prompt}]
     ) as stream:
