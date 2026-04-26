@@ -27,10 +27,10 @@ if "policy_params" not in st.session_state:
 if "brief_text" not in st.session_state:
     st.session_state.brief_text = None
 
-# Load GeoJSON
+# Load GeoJSON — only use saved file if a simulation has been run this session
 geojson_path = "output/parcels.geojson"
 
-if os.path.exists(geojson_path):
+if st.session_state.sim_results and os.path.exists(geojson_path):
     with open(geojson_path, "r") as f:
         map_data = json.load(f)
 else:
