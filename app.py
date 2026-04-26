@@ -2,6 +2,9 @@ import streamlit as st
 import pydeck as pdk
 import json
 import os
+from brief_generator import generate_brief
+from policy_interpreter import interpret_policy
+
 st.set_page_config(page_title="ZoneMind", layout="wide")
 
 st.title("🏙️ ZoneMind")
@@ -9,10 +12,8 @@ st.subheader("AI-Powered Zoning Policy Simulator")
 
 st.markdown("---")
 
-import os
-
 # Load real GeoJSON if available, otherwise use dummy data
-geojson_path = "parcels.geojson"
+geojson_path = "output/parcels.geojson"
 
 if os.path.exists(geojson_path):
     with open(geojson_path, "r") as f:
@@ -71,36 +72,45 @@ with col2:
         line_width_min_pixels=1,
     )
     view_state = pdk.ViewState(latitude=40.655, longitude=-73.93, zoom=12, pitch=30)
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "Zone: {zone}\nNew Units: {new_units}\nDisplacement Risk: {displacement_risk}"}))
+    st.pydeck_chart(pdk.Deck(
+        layers=[layer],
+        initial_view_state=view_state,
+        tooltip={"text": "Zone: {zone}\nNew Units: {new_units}\nDisplacement Risk: {displacement_risk}"}
+    ))
 
 st.markdown("---")
 st.header("Policy Brief")
 
 if run_button and policy_input:
-    with st.spinner("Analyzing policy..."):
-        st.success("✅ Simulation complete!")
-        
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            st.metric("Estimated New Units", "2,340")
-            st.metric("Parcels Affected", "187")
-        
-        with col4:
-            st.metric("Avg Displacement Risk", "0.54")
-            st.metric("Neighborhood Coverage", "34%")
-        
-        st.subheader("AI Summary")
-        st.markdown(f"""
-        **Proposed Policy:** {policy_input}
-        
-        **Analysis:** This upzoning proposal would affect approximately 187 parcels across the study area, 
-        enabling an estimated 2,340 new housing units. High displacement risk is concentrated near 
-        transit corridors where land values are already elevated.
-        
-        **Tradeoffs:** Increased density supports housing supply goals but may accelerate gentrification 
-        in vulnerable neighborhoods. Consider pairing with anti-displacement protections.
-        """)
+    with st.spinner("Interpreting policy..."):
+        policy_params = interpret_policy(policy_input)
+
+    st.success("✅ Policy interpreted!")
+    st.json(policy_params)
+
+    # Dummy sim results until Person A is done
+    sim_results = {
+        "parcels_affected": 187,
+        "new_units": 2340,
+        "top_neighborhoods": ["Bushwick", "Crown Heights", "Flatbush"],
+        "displacement_risk": 5.4
+    }
+
+    col3, col4 = st.columns(2)
+    with col3:
+        st.metric("Estimated New Units", f"{sim_results['new_units']:,}")
+        st.metric("Parcels Affected", f"{sim_results['parcels_affected']:,}")
+    with col4:
+        st.metric("Avg Displacement Risk", f"{sim_results['displacement_risk']}/10")
+        st.metric("Top Area", sim_results['top_neighborhoods'][0])
+
+    st.subheader("AI Policy Brief")
+    brief_placeholder = st.empty()
+    full_brief = ""
+    for chunk, in generate_brief(policy_params["summary"], sim_results):
+        full_brief += chunk
+        brief_placeholder.markdown(full_brief)
+
 elif run_button and not policy_input:
     st.warning("Please enter a policy proposal first.")
 else:
