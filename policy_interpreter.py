@@ -78,8 +78,9 @@ Return ONLY valid JSON. No markdown, no explanation.
 }}
 
 == RULES ==
-1. from_zones: include EVERY zone that has a lower FAR than to_zone.
-   - If the user says "all parcels" or doesn't restrict by zone type, include ALL zones less dense than to_zone.
+1. from_zones: list ONLY the zones the user explicitly mentions upzoning FROM.
+   - If the user names specific zones (e.g. "R2", "R3"), include ONLY those exact zones.
+   - If the user says "all parcels", "all residential", or makes no mention of a specific zone type, THEN include all zones with a lower FAR than to_zone.
    - Do NOT copy the example — look at the zone FAR table above and pick correctly.
 
 2. to_zone: the target density zone. If unspecified, infer from context (e.g. "upzone" near transit usually means R7 or R8).
