@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
@@ -5,14 +6,20 @@ from zoning_rules import ZONING_RULES
 
 # ==============================================================================
 # STEP 1: Load MapPLUTO parcel data
-# Each row = one parcel of land in NYC, with shape + zoning + building info
+# Uses cached GeoJSON if available, otherwise loads from full .gdb (slow)
 # ==============================================================================
-print("Loading MapPLUTO...")
-gdf = gpd.read_file("data/MapPLUTO25v4.gdb", layer="MapPLUTO_25v4_clipped")
+cache_path = "output/manhattan_residential.geojson"
 
-# Keep only Manhattan residential parcels (ZoneDist1 starting with "R")
-gdf = gdf[gdf["Borough"] == "MN"]
-gdf = gdf[gdf["ZoneDist1"].str.startswith("R", na=False)]
+if os.path.exists(cache_path):
+    print("Loading from cache...")
+    gdf = gpd.read_file(cache_path)
+else:
+    print("Loading MapPLUTO (slow, first run only)...")
+    gdf = gpd.read_file("data/MapPLUTO25v4.gdb", layer="MapPLUTO_25v4_clipped")
+    gdf = gdf[gdf["Borough"] == "MN"]
+    gdf = gdf[gdf["ZoneDist1"].str.startswith("R", na=False)]
+    gdf.to_crs("EPSG:4326").to_file(cache_path, driver="GeoJSON")
+    print(f"Saved cache to {cache_path}")
 
 print(f"Loaded {len(gdf)} residential parcels in Manhattan")
 print(gdf[["BBL", "ZoneDist1", "UnitsRes", "LotArea"]].head())
@@ -49,6 +56,12 @@ stations_gdf["geometry"] = stations_gdf.buffer(804)
 gdf = gpd.sjoin(gdf, stations_gdf[["geometry"]], how="left", predicate="intersects")
 gdf["near_subway"] = ~gdf["index_right"].isna()  # True if parcel is near a station
 gdf = gdf.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
+
+# Save filtered parcels cache for frontend teammate
+# Much smaller than full MapPLUTO — only Manhattan residential parcels
+cache_path = "output/manhattan_residential.geojson"
+gdf.to_crs("EPSG:4326").to_file(cache_path, driver="GeoJSON")
+print(f"Saved filtered parcel cache to {cache_path}")
 
 print(f"Parcels near subway: {gdf['near_subway'].sum()}")
 print(f"Parcels not near subway: {(~gdf['near_subway']).sum()}")
@@ -177,3 +190,5 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
 print("Running simulation...")
 result = run_simulation(["R6", "R6A", "R6B"], "R8", buffer_meters=804)
 print(result)
+
+print([col for col in gdf.columns if any(x in col.lower() for x in ["neigh", "hood", "comm", "area", "name"])])
