@@ -101,7 +101,8 @@ elif run_button and policy_input:
                 policy_params["from_zones"],
                 policy_params["to_zone"],
                 policy_params.get("buffer_meters", 800),
-                policy_params.get("near_subway_only", True)
+                policy_params.get("near_subway_only", True),
+                policy_params.get("filter_zipcodes")
             )
 
         # Store results and trigger a clean rerun so the map reloads from the new GeoJSON
