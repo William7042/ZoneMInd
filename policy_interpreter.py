@@ -67,7 +67,13 @@ Policy: {user_input}"""
     )
 
     try:
-        params = json.loads(response.content[0].text)
+        raw = response.content[0].text.strip()
+        # Strip markdown code fences if the model wraps its output
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        params = json.loads(raw)
         return _validate_zones(params)
     except (json.JSONDecodeError, KeyError):
         return _validate_zones({
