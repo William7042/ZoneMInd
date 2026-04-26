@@ -92,16 +92,7 @@ def _load_data():
     gdf = gdf.to_crs("EPSG:3857")
     stations_gdf = stations_gdf.to_crs("EPSG:3857")
 
-    print("Buffering subway stations...")
-    stations_gdf["geometry"] = stations_gdf.buffer(804)
-
-    gdf = gpd.sjoin(gdf, stations_gdf[["geometry"]], how="left", predicate="intersects")
-    gdf["near_subway"] = ~gdf["index_right"].isna()
-    gdf = gdf.drop(columns=["index_right"]).drop_duplicates(subset=["BBL"])
-
-    print(f"Parcels near subway: {gdf['near_subway'].sum()}")
-    print(f"Parcels not near subway: {(~gdf['near_subway']).sum()}")
-
+    # Store raw station points before buffering — run_simulation() will buffer at query time
     _gdf = gdf
     _stations_gdf = stations_gdf
 

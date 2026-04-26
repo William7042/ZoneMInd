@@ -2,6 +2,7 @@ import streamlit as st
 import pydeck as pdk
 import json
 import os
+import pandas as pd
 from brief_generator import generate_brief
 from policy_interpreter import interpret_policy
 
@@ -36,6 +37,12 @@ if st.session_state.sim_results and os.path.exists(geojson_path):
 else:
     map_data = {"type": "FeatureCollection", "features": []}
 
+# Load subway stations
+stations_df = pd.read_csv("data/Stations.csv")
+stations_data = stations_df[["Stop Name", "GTFS Latitude", "GTFS Longitude"]].rename(
+    columns={"GTFS Latitude": "lat", "GTFS Longitude": "lon"}
+).to_dict("records")
+
 col1, col2 = st.columns([1, 2])
 
 with col1:
@@ -60,9 +67,18 @@ with col2:
         get_line_color=[255, 255, 255],
         line_width_min_pixels=1,
     )
+    station_layer = pdk.Layer(
+        "ScatterplotLayer",
+        stations_data,
+        get_position="[lon, lat]",
+        radius_min_pixels=4,
+        radius_max_pixels=6,
+        get_fill_color=[255, 220, 0, 220],
+        pickable=False,
+    )
     view_state = pdk.ViewState(latitude=40.728, longitude=-73.994, zoom=11, pitch=30)
     st.pydeck_chart(pdk.Deck(
-        layers=[layer],
+        layers=[layer, station_layer],
         initial_view_state=view_state,
         tooltip={"text": "Zone: {ZoneDist1}\nUnits Gained: {units_gained}\nDisplacement Risk: {parcel_risk}/10"}
     ))
