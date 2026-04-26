@@ -4,6 +4,48 @@ import geopandas as gpd
 from shapely.geometry import Point
 from zoning_rules import ZONING_RULES, get_far
 
+# Zip code to neighborhood mapping for Manhattan
+ZIP_TO_NEIGHBORHOOD = {
+    "10001": "Chelsea/Hudson Yards",
+    "10002": "Lower East Side",
+    "10003": "East Village",
+    "10004": "Financial District",
+    "10005": "Financial District",
+    "10006": "Financial District",
+    "10007": "Tribeca",
+    "10009": "East Village",
+    "10010": "Gramercy",
+    "10011": "Chelsea",
+    "10012": "SoHo/NoHo",
+    "10013": "SoHo/Tribeca",
+    "10014": "West Village",
+    "10016": "Murray Hill",
+    "10017": "Midtown East",
+    "10018": "Midtown",
+    "10019": "Midtown West",
+    "10020": "Midtown",
+    "10021": "Upper East Side",
+    "10022": "Midtown East",
+    "10023": "Upper West Side",
+    "10024": "Upper West Side",
+    "10025": "Upper West Side",
+    "10026": "Harlem",
+    "10027": "Harlem",
+    "10028": "Upper East Side",
+    "10029": "East Harlem",
+    "10030": "Harlem",
+    "10031": "Hamilton Heights",
+    "10032": "Washington Heights",
+    "10033": "Washington Heights",
+    "10034": "Inwood",
+    "10035": "East Harlem",
+    "10036": "Midtown",
+    "10037": "Harlem",
+    "10038": "Financial District",
+    "10039": "Harlem",
+    "10040": "Inwood",
+}
+
 # ==============================================================================
 # STEP 1: Load MapPLUTO parcel data
 # Uses cached GeoJSON if available, otherwise loads from full .gdb (slow)
@@ -162,10 +204,21 @@ def run_simulation(from_zones, to_zone, buffer_meters=804):
     parcels_affected = int(affected.sum())
     new_units = int(sim["units_gained"].sum())
 
+    # Top neighborhoods by displacement risk
+    sim["neighborhood"] = sim["ZipCode"].fillna(0).astype(int).astype(str).str.strip().map(ZIP_TO_NEIGHBORHOOD).fillna("Other")
+    top_hoods = (
+        sim[affected]
+        .groupby("neighborhood")["parcel_risk"]
+        .mean()
+        .sort_values(ascending=False)
+        .head(3)
+        .index.tolist()
+    )
+
     return {
         "parcels_affected": parcels_affected,
         "new_units": new_units,
-        "top_neighborhoods": [],  # placeholder
+        "top_neighborhoods": top_hoods,
         "displacement_risk": displacement_risk,
         "geojson_path": geojson_path
     }
