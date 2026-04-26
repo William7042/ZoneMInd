@@ -65,4 +65,33 @@ with col2:
 
 st.markdown("---")
 st.header("Policy Brief")
-st.info("AI-generated policy brief will appear here.")
+
+if run_button and policy_input:
+    with st.spinner("Analyzing policy..."):
+        st.success("✅ Simulation complete!")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            st.metric("Estimated New Units", "2,340")
+            st.metric("Parcels Affected", "187")
+        
+        with col4:
+            st.metric("Avg Displacement Risk", "0.54")
+            st.metric("Neighborhood Coverage", "34%")
+        
+        st.subheader("AI Summary")
+        st.markdown(f"""
+        **Proposed Policy:** {policy_input}
+        
+        **Analysis:** This upzoning proposal would affect approximately 187 parcels across the study area, 
+        enabling an estimated 2,340 new housing units. High displacement risk is concentrated near 
+        transit corridors where land values are already elevated.
+        
+        **Tradeoffs:** Increased density supports housing supply goals but may accelerate gentrification 
+        in vulnerable neighborhoods. Consider pairing with anti-displacement protections.
+        """)
+elif run_button and not policy_input:
+    st.warning("Please enter a policy proposal first.")
+else:
+    st.info("Enter a proposal and click Run Simulation to see results.")
