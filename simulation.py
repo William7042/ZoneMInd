@@ -140,7 +140,8 @@ def run_simulation(from_zones, to_zone, buffer_meters=804, near_subway_only=True
     far_map = {z: rules["max_far"] for z, rules in ZONING_RULES.items()}
     sim["far_before"] = sim["ZoneDist1"].map(far_map).fillna(0)
 
-    zone_match = sim["ZoneDist1"].str.startswith(tuple(from_zones), na=False)
+    base_zone = sim["ZoneDist1"].str.split("-").str[0]
+    zone_match = base_zone.isin(from_zones)
     affected = zone_match & sim["near_subway"]
 
     sim["far_after"] = np.where(affected, to_far, sim["far_before"])
